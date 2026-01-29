@@ -232,7 +232,14 @@ def main(opt):
 
         print("--------> Testing on", de, "testset.")
         print("\n")
-        globals()[f"run_{de}"](opt, net, dataset, factor=8)
+
+        # Check if specific function exists, otherwise fallback to generic run_test
+        func_name = f"run_{de}"
+        if func_name in globals():
+            globals()[func_name](opt, net, dataset, factor=8)
+        else:
+            # Fallback for custom datasets (e.g. Blur, Rain)
+            run_test(opt, net, dataset, factor=8)
 
 
 def depth_type(value):
