@@ -240,6 +240,10 @@ def main(opt):
     ).cuda()
     net.eval()
 
+    # Force save_results if inference_only
+    if opt.inference_only:
+        opt.save_results = True
+
     # Auto-populate benchmarks if missing
     if not opt.benchmarks:
         if opt.trainset == "custom":
