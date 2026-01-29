@@ -218,6 +218,27 @@ class CustomTestDataset(Dataset):
                         self.samples.append({"GT": gt_f, "LQ": lq_f, "de_type": idx})
                     elif self.args.inference_only:
                         self.samples.append({"GT": None, "LQ": lq_f, "de_type": idx})
+            elif self.args.inference_only:
+                # Flattened support debug
+                exts = ["*.jpg", "*.png", "*.jpeg", "*.bmp"]
+                print(f"DEBUG: Checking flat structure in {de_path} with exts {exts}")
+                lq_files = []
+                for ext in exts:
+                    glob_path = os.path.join(de_path, ext)
+                    found = glob.glob(glob_path)
+                    print(f"DEBUG: Globbing {glob_path} -> Found {len(found)}")
+                    lq_files.extend(found)
+
+                if lq_files:
+                    print(
+                        f"  -> Found {len(lq_files)} images in {de_name} (Flat structure). Using as LQ."
+                    )
+                    for lq_f in lq_files:
+                        self.samples.append({"GT": None, "LQ": lq_f, "de_type": idx})
+                else:
+                    print(
+                        f"  -> No images found in {de_path}. Checked extensions: {exts}"
+                    )
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
