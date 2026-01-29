@@ -125,23 +125,14 @@ def run_test(opts, net, dataset, factor=8):
 
             # save output images
             restored = torch.clamp(restored, 0, 1)
-            lpips.append(calc_lpips(clean_patch, restored).cpu().numpy())
 
-            restored = restored.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
-            degrad_patch = (
-                degrad_patch.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
-            )
-            clean = clean_patch.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
-            ssim.append(calc_ssim(clean, restored))
-            psnr_temp = peak_signal_noise_ratio(clean, restored, data_range=1)
-            psnr.append(psnr_temp)
-
-            if opts.save_results:
+            if opts.inference_only:
+                # Just save, no metrics
+                restored = (
+                    restored.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
+                )
                 save_name = (
-                    os.path.splitext(os.path.split(clean_name[0])[-1])[0]
-                    + "_"
-                    + str(round(psnr_temp, 2))
-                    + ".png"
+                    os.path.splitext(os.path.split(clean_name[0])[-1])[0] + ".png"
                 )
                 save_img(
                     (
@@ -153,12 +144,48 @@ def run_test(opts, net, dataset, factor=8):
                     ),
                     img_as_ubyte(restored),
                 )
+            else:
+                lpips.append(calc_lpips(clean_patch, restored).cpu().numpy())
 
-    print(
-        "PSNR: {:f} SSIM: {:f} LPIPS: {:f}\n".format(
-            np.mean(psnr), np.mean(ssim), np.mean(lpips)
+                restored = (
+                    restored.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
+                )
+                degrad_patch = (
+                    degrad_patch.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
+                )
+                clean = (
+                    clean_patch.cpu().detach().permute(0, 2, 3, 1).squeeze(0).numpy()
+                )
+                ssim.append(calc_ssim(clean, restored))
+                psnr_temp = peak_signal_noise_ratio(clean, restored, data_range=1)
+                psnr.append(psnr_temp)
+
+                if opts.save_results:
+                    save_name = (
+                        os.path.splitext(os.path.split(clean_name[0])[-1])[0]
+                        + "_"
+                        + str(round(psnr_temp, 2))
+                        + ".png"
+                    )
+                save_img(
+                    (
+                        os.path.join(
+                            os.getcwd(),
+                            f"results/{opts.checkpoint_id}/{opts.benchmarks[0]}",
+                            save_name,
+                        )
+                    ),
+                    img_as_ubyte(restored),
+                )
+
+    if not opts.inference_only:
+        print(
+            "PSNR: {:f} SSIM: {:f} LPIPS: {:f}\n".format(
+                np.mean(psnr), np.mean(ssim), np.mean(lpips)
+            )
         )
-    )
+    else:
+        print("Inference finished. Images saved.")
 
 
 ## test LolV1
@@ -212,6 +239,33 @@ def main(opt):
         os.path.join(opt.ckpt_dir, opt.checkpoint_id, "last.ckpt"), opt=opt
     ).cuda()
     net.eval()
+
+    # Auto-populate benchmarks if missing
+    if not opt.benchmarks:
+        if opt.trainset == "custom":
+            root_dir = opt.data_file_dir
+            if os.path.exists(root_dir):
+                subdirs = sorted(
+                    [
+                        d
+                        for d in os.listdir(root_dir)
+                        if os.path.isdir(os.path.join(root_dir, d))
+                    ]
+                )
+                if subdirs:
+                    print(f"No benchmarks specified. Auto-detected: {subdirs}")
+                    opt.benchmarks = subdirs
+                else:
+                    print("No subdirectories found in dataset root to test.")
+        else:
+            # Default fallback for standard datasets if needed, generally standard datasets have hardcoded lists
+            pass
+
+    if not opt.benchmarks:
+        print(
+            "Warning: No benchmarks to test. Please specify --benchmarks or ensure dataset directory has subfolders."
+        )
+        return
 
     for de in opt.benchmarks:
         ind_opt = opt

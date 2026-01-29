@@ -200,7 +200,11 @@ class CustomTestDataset(Dataset):
             gt_path = os.path.join(de_path, "GT")
             lq_path = os.path.join(de_path, "LQ")
 
-            if os.path.exists(gt_path) and os.path.exists(lq_path):
+            if os.path.exists(lq_path):
+                # If inference_only, we don't strictly need GT path to exist generally,
+                # but let's assume structure is [Degradation]/LQ at least.
+                # GT path might not exist.
+
                 exts = ["*.jpg", "*.png", "*.jpeg", "*.bmp"]
                 lq_files = []
                 for ext in exts:
@@ -212,16 +216,22 @@ class CustomTestDataset(Dataset):
 
                     if os.path.exists(gt_f):
                         self.samples.append({"GT": gt_f, "LQ": lq_f, "de_type": idx})
+                    elif self.args.inference_only:
+                        self.samples.append({"GT": None, "LQ": lq_f, "de_type": idx})
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
         de_id = sample["de_type"]
 
         lq_img = np.array(Image.open(sample["LQ"]).convert("RGB"))
-        gt_img = np.array(Image.open(sample["GT"]).convert("RGB"))
-
         lq_tensor = self.toTensor(lq_img)
-        gt_tensor = self.toTensor(gt_img)
+
+        if sample["GT"]:
+            gt_img = np.array(Image.open(sample["GT"]).convert("RGB"))
+            gt_tensor = self.toTensor(gt_img)
+        else:
+            # For inference only, use lq as dummy gt to keep shape consistency
+            gt_tensor = lq_tensor
 
         return [sample["LQ"], de_id], lq_tensor, gt_tensor
 

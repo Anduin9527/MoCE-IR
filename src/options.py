@@ -70,6 +70,11 @@ def base_parser():
     parser.add_argument(
         "--save_results", action="store_true", help="Save restored outputs."
     )
+    parser.add_argument(
+        "--inference_only",
+        action="store_true",
+        help="Inference only mode (no GT needed).",
+    )
 
     # Paths
     parser.add_argument(
