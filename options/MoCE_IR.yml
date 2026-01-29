@@ -1,0 +1,46 @@
+# General Settings
+model: MoCE_IR
+epochs: 120
+batch_size: 4  # Paper says 32, adjusted for typical GPU limits. Increase if possible.
+lr: 0.0002     # 2e-4
+num_workers: 8
+accum_grad: 1
+save_results: false
+use_swanlab: true
+swanlab_project: MoCE-IR
+swanlab_experiment_name: MoCE-IR_fine_tune # Set to null to auto-generate or a string to name it
+ckpt_dir: checkpoints
+output_path: output/
+num_gpus: 1
+
+# Dataset
+trainset: custom  # Changed to custom to match previous task
+data_file_dir: /home/share/AIO # Example path, change as needed
+patch_size: 128
+de_type: 
+  - Blur
+  - Rain
+  - Haze
+  # Add other types as needed
+
+# Model Architecture (MoCE-IR Standard)
+dim: 48
+num_blocks: [4, 6, 6, 8]
+num_dec_blocks: [2, 4, 4]
+latent_dim: 2
+num_exp_blocks: 4
+num_refinement_blocks: 4
+heads: [1, 2, 4, 8]
+stage_depth: [1, 1, 1]
+
+# MoE & Routing
+with_complexity: true
+complexity_scale: max
+rank_type: spread
+depth_type: constant
+topk: 1
+
+# Loss
+loss_type: fft # Options: L1, fft
+balance_loss_weight: 0.01
+fft_loss_weight: 0.1

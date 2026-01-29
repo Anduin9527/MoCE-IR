@@ -5,7 +5,7 @@ train_ckpt
 visuals
 tests
 checkpoints/
-
+Temp/
 
 *.DS_Store
 .idea
