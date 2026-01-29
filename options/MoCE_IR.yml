@@ -1,7 +1,7 @@
 # General Settings
 model: MoCE_IR
 epochs: 120
-batch_size: 4  # Paper says 32, adjusted for typical GPU limits. Increase if possible.
+batch_size: 32  # Paper says 32, adjusted for typical GPU limits. Increase if possible.
 lr: 0.0002     # 2e-4
 num_workers: 8
 accum_grad: 1
@@ -16,7 +16,7 @@ num_gpus: 1
 # Dataset
 trainset: custom  # Changed to custom to match previous task
 data_file_dir: /data/users/gaoyin/datasets/AIO # Example path, change as needed
-patch_size: 128
+patch_size: 256
 de_type: 
   - Blur
   - Rain
