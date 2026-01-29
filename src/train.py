@@ -70,17 +70,20 @@ class PLTrainModel(pl.LightningModule):
         balance_loss = self.net.total_loss
 
         if self.opt.loss_type == "fft":
-            loss = self.loss_fn(restored, clean_patch)
-            aux_loss = self.aux_fn(restored, clean_patch)
-            loss += aux_loss
+            l1_loss = self.loss_fn(restored, clean_patch)
+            fft_loss = self.aux_fn(restored, clean_patch)
+            loss = l1_loss + fft_loss
+            self.log("loss/l1", l1_loss, sync_dist=True)
+            self.log("loss/fft", fft_loss, sync_dist=True)
         else:
             loss = self.loss_fn(restored, clean_patch)
+            self.log("loss/l1", loss, sync_dist=True)
 
         loss += self.balance_loss_weight * balance_loss
-        self.log("Train_Loss", loss, sync_dist=True)
-        self.log("Balance", balance_loss, sync_dist=True)
+        self.log("loss/total", loss, sync_dist=True)
+        self.log("loss/balance", balance_loss, sync_dist=True)
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
-        self.log("LR Schedule", lr, sync_dist=True)
+        self.log("train/lr", lr, sync_dist=True)
 
         return loss
 
