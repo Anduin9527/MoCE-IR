@@ -16,9 +16,9 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from lightning.pytorch.loggers import TensorBoardLogger
 
 try:
-    from swanlab.integration.lightning import SwanLabLogger
+    import swanlab
 except ImportError:
-    SwanLabLogger = None
+    swanlab = None
     print("Warning: swanlab not installed.")
 
 from net.moce_ir import MoCEIR
@@ -61,6 +61,18 @@ class PLTrainModel(pl.LightningModule):
         else:
             self.loss_fn = nn.L1Loss()
 
+    def on_fit_start(self):
+        if self.opt.use_swanlab and self.trainer.is_global_zero:
+            if swanlab is None:
+                print("Swanlab not installed, skipping init.")
+                return
+
+            swanlab.init(
+                project=self.opt.swanlab_project,
+                name=self.opt.swanlab_experiment_name,
+                config=vars(self.opt),
+            )
+
     def forward(self, x):
         return self.net(x)
 
@@ -76,14 +88,29 @@ class PLTrainModel(pl.LightningModule):
             self.log("loss/l1", l1_loss, sync_dist=True)
             self.log("loss/fft", fft_loss, sync_dist=True)
         else:
-            loss = self.loss_fn(restored, clean_patch)
-            self.log("loss/l1", loss, sync_dist=True)
+            l1_loss = self.loss_fn(restored, clean_patch)
+            loss = l1_loss.clone()
+            self.log("loss/l1", l1_loss, sync_dist=True)
 
         loss += self.balance_loss_weight * balance_loss
         self.log("loss/total", loss, sync_dist=True)
         self.log("loss/balance", balance_loss, sync_dist=True)
         lr = self.trainer.optimizers[0].param_groups[0]["lr"]
         self.log("train/lr", lr, sync_dist=True)
+
+        if self.opt.use_swanlab and self.trainer.is_global_zero:
+            log_dict = {
+                "train/loss_total": loss.item(),
+                "train/loss_balance": balance_loss.item(),
+                "train/lr": lr,
+            }
+            if self.opt.loss_type == "fft":
+                log_dict["train/loss_l1"] = l1_loss.item()
+                log_dict["train/loss_fft"] = fft_loss.item()
+            else:
+                log_dict["train/loss_l1"] = l1_loss.item()
+
+            swanlab.log(log_dict)
 
         return loss
 
@@ -106,6 +133,21 @@ class PLTrainModel(pl.LightningModule):
         self.log("val/psnr", psnr, sync_dist=True, on_epoch=True)
         self.log("val/ssim", ssim, sync_dist=True, on_epoch=True)
         return {"val_psnr": psnr, "val_ssim": ssim}
+
+    def on_validation_epoch_end(self):
+        if self.opt.use_swanlab and self.trainer.is_global_zero:
+            # Get metrics from trainer.callback_metrics which handles sync/aggregation
+            psnr = self.trainer.callback_metrics.get("val/psnr")
+            ssim = self.trainer.callback_metrics.get("val/ssim")
+
+            log_dict = {}
+            if psnr is not None:
+                log_dict["val/psnr"] = psnr.item()
+            if ssim is not None:
+                log_dict["val/ssim"] = ssim.item()
+
+            if log_dict:
+                swanlab.log(log_dict, step=self.global_step)
 
     def lr_scheduler_step(self, scheduler, metric):
         scheduler.step()
@@ -131,17 +173,22 @@ def main(opt):
     log_dir = os.path.join("logs/", time_stamp)
     pathlib.Path(log_dir).mkdir(parents=True, exist_ok=True)
     if opt.use_swanlab:
-        project = opt.swanlab_project if opt.swanlab_project else "MoCE-IR"
-        name = (
-            opt.swanlab_experiment_name
-            if opt.swanlab_experiment_name
-            else (opt.model + "_" + time_stamp)
-        )
-        if SwanLabLogger is None:
+        opt.swanlab_project = opt.swanlab_project if opt.swanlab_project else "MoCE-IR"
+        if not opt.swanlab_experiment_name:
+            opt.swanlab_experiment_name = opt.model + "_" + time_stamp
+
+        if swanlab is None:
             raise ImportError(
                 "Please install swanlab to use it as a logger: pip install swanlab"
             )
-        logger = SwanLabLogger(project=project, name=name, config=opt)
+        # SwanLab initialization is now handled in PLTrainModel.on_fit_start
+        logger = False  # Disable default logger if using SwanLab manually (or use None/TensorBoardLogger as backup)
+        # To avoid double logging if we still want TensorBoard, we could use TensorBoardLogger here.
+        # But user request implies replacing logic. Let's just disable Lightning logger for now or fallback to False (no logger).
+        # Actually, let's keep TensorBoardLogger as a local fallback if desired?
+        # The prompt said "abandon lighting related logic" for logger.
+        # So setting logger to specific Lightning logger is probably not what's wanted for the main logging.
+        # But Lightning needs a logger or False.
 
     else:
         logger = TensorBoardLogger(save_dir=log_dir)
@@ -199,13 +246,15 @@ def main(opt):
 
     # Create Validation Dataset if custom
     val_loader = None
-    if opt.trainset == "custom":
+    if opt.trainset == "custom" and opt.val:
         val_set = CustomTestDataset(opt)
         if len(val_set) > 0:
             val_loader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=4)
             print(f"Validation enabled. Loaded {len(val_set)} validation samples.")
         else:
             print("Warning: Custom dataset root validation set empty or missing.")
+    elif not opt.val:
+        print("Validation disabled.")
 
     # Train model
     trainer.fit(

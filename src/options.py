@@ -33,6 +33,9 @@ def base_parser():
         "--model", type=str, default=None, help="Model to use: MoCE_IR or MoCE_IR_S."
     )
     parser.add_argument(
+        "--val", action="store_true", help="Run validation during training."
+    )
+    parser.add_argument(
         "--epochs", type=int, default=120, help="Number of training epochs."
     )
     parser.add_argument("--batch_size", type=int, default=4, help="Batch size per GPU.")

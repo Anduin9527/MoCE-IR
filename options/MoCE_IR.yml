@@ -6,6 +6,7 @@ lr: 0.0002     # 2e-4
 num_workers: 8
 accum_grad: 1
 save_results: false
+val: false
 use_swanlab: true
 swanlab_project: MoCE-IR
 swanlab_experiment_name: MoCE-IR_fine_tune # Set to null to auto-generate or a string to name it
